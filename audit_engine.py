@@ -25,15 +25,15 @@ For each check choose exactly one category:
 - Potential Gap: the KFS evidence indicates a missing, unclear, or conflicting disclosure and supplied RBI evidence supports the requirement.
 - Insufficient Evidence: either the KFS text or supplied RBI evidence is not enough to assess the item.
 
-Return exactly four checks named "APR transparency", "Penal charges", "Cooling-off period", and "Grievance officer". Return only JSON with this shape:
-{"overall_assessment":"Compliant|Potential Gap|Insufficient Evidence","checks":[{"check":"APR transparency","category":"Compliant|Potential Gap|Insufficient Evidence","finding":"...","document_evidence":"short exact quote from KFS or explain absence","document_pages":["K1"],"rule_evidence":["R1"],"recommended_action":"..."}]}
+Return exactly four checks named "APR Disclosure", "Penal Charges", "Cooling-off Period", and "Grievance Redressal Details". Return only JSON with this shape:
+{"overall_assessment":"Compliant|Potential Gap|Insufficient Evidence","checks":[{"check":"APR Disclosure","category":"Compliant|Potential Gap|Insufficient Evidence","finding":"...","document_evidence":"short exact quote from KFS or explain absence","document_pages":["K1"],"rule_evidence":["R1"],"recommended_action":"..."}]}
 Use only the supplied K page IDs and R evidence IDs. If a check cannot be verified, choose Insufficient Evidence. These are AI-generated demonstration assessments, not legal advice or a final regulatory decision."""
 
 CHECK_QUERIES = (
-    ("APR transparency", "annual percentage rate APR all upfront fees processing charges KFS"),
-    ("Penal charges", "penal charges flat fee penal interest compounding default delay"),
-    ("Cooling-off period", "cooling-off period look-up period exit loan prepayment penalty days"),
-    ("Grievance officer", "grievance redressal nodal officer name email phone contact KFS"),
+    ("APR Disclosure", "annual percentage rate APR all upfront fees processing charges KFS"),
+    ("Penal Charges", "penal charges flat fee penal interest compounding default delay"),
+    ("Cooling-off Period", "cooling-off period look-up period exit loan prepayment penalty days"),
+    ("Grievance Redressal Details", "grievance redressal nodal officer name email phone contact KFS"),
 )
 VALID_CATEGORIES = {"Compliant", "Potential Gap", "Insufficient Evidence"}
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)

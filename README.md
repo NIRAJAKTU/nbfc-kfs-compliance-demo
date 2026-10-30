@@ -1,8 +1,8 @@
-# AI-Native Financial Document Intelligence (Portfolio Demo)
+# Loan KFS Compliance Auditor (AI/GenAI Portfolio Demo)
 
-An AI/GenAI portfolio demonstration of financial document intelligence and evidence-grounded regulatory analysis.
+An AI/GenAI portfolio demonstration for analyzing NBFC Loan Key Facts Statements against configured RBI regulatory references.
 
-This independent demonstration uses synthetic regulatory reference documents and sample financial documents. It is not an official RBI compliance system, does not establish regulatory compliance and is not intended for production financial decision-making.
+This independent demonstration uses synthetic regulatory reference documents and sample Loan KFS PDFs. It is not an official RBI compliance system, does not establish regulatory compliance and is not intended for production financial decision-making.
 
 ---
 
@@ -33,7 +33,13 @@ You only do these once per machine:
 
 3. Put permitted RBI reference PDFs in `rbi_documents/`. For a hosted deployment, the source PDFs must be committed to your personal repository; keep confidential customer documents out of it.
 
-4. Optionally check PDF readability:
+4. Generate a synthetic sample KFS for testing:
+
+  python create_sample_kfs_pdf.py
+
+  This creates `sample_documents/synthetic_kfs_for_demo.pdf`. It contains fictional data only.
+
+5. Optionally check source PDF readability:
 
   python ingest_rbi.py
 
@@ -179,7 +185,7 @@ If you want to understand the project quickly, read files in this order:
 ## MVP Scope (Current)
 
 Included now:
-- Hosted Groq-based financial document intelligence demonstration
+- Hosted Groq-based Loan KFS compliance assessment demonstration
 - RAG-style lexical retrieval and source/page evidence display
 - Three-category assessments and downloadable PDF reports
 - Business challenges, AI architecture, and implementation contact tabs
@@ -210,7 +216,7 @@ Confirm Streamlit is running and open http://localhost:8501.
 
 ## Demo Tip (Non-Technical Audience)
 
-Use synthetic KFS examples only while the synthetic sample RBI document is configured. Replace that source with verified official RBI documents before presenting results as RBI-based analysis.
+Use the provided synthetic Loan KFS PDF only while the synthetic sample RBI document is configured. Replace that source with verified official RBI documents before presenting results as RBI-based analysis.
 
 ## Publish a Personal Demo
 

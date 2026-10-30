@@ -15,9 +15,9 @@ from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 DISCLAIMER = (
-    "This is an independent AI/GenAI portfolio demonstration using synthetic regulatory reference "
-    "documents and sample financial documents. It is not an official RBI compliance system, does not "
-    "establish regulatory compliance and is not intended for production financial decision-making."
+    "This is an independent AI/GenAI portfolio demonstration using synthetic regulatory reference documents "
+    "and sample Loan KFS PDFs. It is not an official RBI compliance system, does not establish regulatory "
+    "compliance and is not intended for production financial decision-making."
 )
 
 CATEGORY_COLORS = {
@@ -68,13 +68,13 @@ def build_audit_pdf(filename: str, report: dict[str, Any]) -> bytes:
     overall = str(report.get("overall_assessment", "Insufficient Evidence"))
     accent = CATEGORY_COLORS.get(overall, CATEGORY_COLORS["Insufficient Evidence"])
     story = [
-        Paragraph("AI-Powered Financial Document Intelligence", styles["ReportTitle"]),
+        Paragraph("Loan KFS Compliance Assessment", styles["ReportTitle"]),
         Paragraph("AI-generated demonstration assessment · Human review required", styles["BodySmall"]),
         Spacer(1, 4 * mm),
     ]
 
     summary = Table([
-        [Paragraph("DOCUMENT", styles["BodySmall"]), Paragraph("OVERALL ASSESSMENT", styles["BodySmall"]), Paragraph("GENERATED (UTC)", styles["BodySmall"])],
+        [Paragraph("LOAN KFS", styles["BodySmall"]), Paragraph("OVERALL ASSESSMENT", styles["BodySmall"]), Paragraph("GENERATED (UTC)", styles["BodySmall"])],
         [Paragraph(_paragraph_text(filename), styles["BodyText"]),
          Paragraph(f'<font color="{accent.hexval()}"><b>{escape(overall)}</b></font>', styles["BodyText"]),
          Paragraph(datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), styles["BodyText"])],

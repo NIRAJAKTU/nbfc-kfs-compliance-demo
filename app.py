@@ -14,13 +14,13 @@ from pathlib import Path
 
 import streamlit as st
 import config
-from audit_report import DISCLAIMER, build_audit_pdf
+from audit_report import build_audit_pdf
 
 # ---------------------------------------------------------------------------
 # Page configuration (must be the first Streamlit call)
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="AI Financial Document Intelligence | Demo",
+    page_title="Loan KFS Compliance Auditor | Demo",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -49,8 +49,8 @@ uses_sample_rules = any("sample" in path.name.lower() for path in rbi_pdf_paths)
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.title("AI-Native Financial Document Intelligence")
-    st.caption("Regulatory analysis · Independent AI/GenAI portfolio demo")
+    st.title("Loan KFS Compliance Auditor")
+    st.caption("NBFC Loan Key Facts Statement validation")
 
     st.divider()
 
@@ -61,11 +61,11 @@ with st.sidebar:
 
     st.divider()
 
-    st.markdown("**Audit Checklist**")
-    st.markdown("1. APR transparency (all-inclusive)")
-    st.markdown("2. Penal charges — flat fee only")
-    st.markdown("3. Cooling-off / look-up period")
-    st.markdown("4. Nodal Grievance Officer details")
+    st.markdown("**Loan KFS checks**")
+    st.markdown("1. APR Disclosure")
+    st.markdown("2. Penal Charges")
+    st.markdown("3. Cooling-off Period")
+    st.markdown("4. Grievance Redressal Details")
 
     st.divider()
 
@@ -93,17 +93,26 @@ with st.sidebar:
 # Main panel
 # ---------------------------------------------------------------------------
 audit_tab, why_tab, architecture_tab, contact_tab = st.tabs(
-    ["Document Intelligence", "Business Challenges", "AI Architecture", "AI Solutions"]
+    ["Loan KFS Validator", "Business Challenges", "AI Architecture", "AI Solutions"]
 )
 
 with audit_tab:
-    st.title("AI-Powered Financial Document Intelligence")
+    st.title("Loan KFS Compliance Auditor")
     st.markdown(
-        "An intelligent document analysis engine demonstrating how Generative AI, RAG and "
-        "evidence-grounded reasoning can streamline financial document review."
+        "AI-powered analysis of NBFC Loan Key Facts Statements against configured RBI regulatory requirements."
     )
 
-    st.warning(DISCLAIMER, icon="⚠️")
+    st.warning(
+        "Portfolio demonstration using synthetic regulatory reference documents and sample loan KFS PDFs. "
+        "Not an official RBI compliance determination.",
+        icon="⚠️",
+    )
+    st.caption(
+        "Upload a Loan KFS containing loan amount, APR, interest rate, processing fees, repayment schedule and other mandatory disclosures."
+    )
+    st.caption(
+        "Workflow: Upload Loan KFS → AI Document Extraction → RBI Rule Retrieval → LLM-Powered Analysis → Compliance Assessment."
+    )
     st.caption("AI-generated demonstration assessment · Human review required · Do not upload confidential documents")
 
     if uses_sample_rules:
@@ -122,9 +131,9 @@ with audit_tab:
     st.divider()
 
     uploaded_file = st.file_uploader(
-        label="Upload a sample financial document",
+        label="Upload your Loan KFS (Key Facts Statement) PDF",
         type=["pdf"],
-        help=f"Text-based PDF only · up to {config.MAX_UPLOAD_MB} MB · up to {config.MAX_KFS_PAGES} pages.",
+        help=f"Upload a text-based Loan KFS PDF · maximum {config.MAX_UPLOAD_MB} MB and {config.MAX_KFS_PAGES} pages.",
         label_visibility="visible",
     )
 
@@ -133,7 +142,7 @@ with audit_tab:
         file_size_mb = len(uploaded_bytes) / (1024 * 1024)
         upload_too_large = file_size_mb > config.MAX_UPLOAD_MB
         if upload_too_large:
-            st.error(f"File is {file_size_mb:.1f} MB; the limit is {config.MAX_UPLOAD_MB} MB.")
+            st.error(f"Loan KFS PDF is {file_size_mb:.1f} MB; the limit is {config.MAX_UPLOAD_MB} MB.")
         else:
             from pypdf import PdfReader
             from io import BytesIO
@@ -143,19 +152,19 @@ with audit_tab:
             except Exception:
                 page_count = 0
             if not page_count:
-                st.error("This file could not be read as a PDF. Choose a valid, text-based PDF.")
+                st.error("This Loan KFS could not be read. Choose a valid, text-based Loan KFS PDF.")
                 upload_too_large = True
             elif page_count > config.MAX_KFS_PAGES:
-                st.error(f"This PDF has {page_count} pages; the limit is {config.MAX_KFS_PAGES} pages.")
+                st.error(f"This Loan KFS PDF has {page_count} pages; the limit is {config.MAX_KFS_PAGES} pages.")
                 upload_too_large = True
             else:
                 st.success(
-                    f"Ready for analysis · **{uploaded_file.name}** · {page_count} pages · {file_size_mb:.1f} MB",
+                    f"Loan KFS ready for validation · **{uploaded_file.name}** · {page_count} pages · {file_size_mb:.1f} MB",
                     icon="📄",
                 )
 
         run_btn = st.button(
-            label="Analyze document",
+            label="Validate KFS Against RBI Rules",
             type="primary",
             use_container_width=True,
             disabled=not prereqs_ok or upload_too_large,
@@ -168,7 +177,7 @@ with audit_tab:
                 tmp_path = tmp.name
 
             try:
-                with st.status("Preparing document intelligence workflow…", expanded=True) as progress:
+                with st.status("Preparing Loan KFS compliance validation…", expanded=True) as progress:
                     from audit_engine import audit_kfs_document
 
                     def report_stage(stage: str) -> None:
@@ -179,7 +188,7 @@ with audit_tab:
                         api_key=groq_api_key,
                         progress_callback=report_stage,
                     )
-                    progress.update(label="Assessment generated · Ready for human review", state="complete", expanded=False)
+                    progress.update(label="KFS assessment generated · Ready for human review", state="complete", expanded=False)
 
                 st.session_state["audit_result"] = result
                 st.session_state["audit_filename"] = uploaded_file.name
@@ -200,7 +209,7 @@ with audit_tab:
 
     if "audit_result" in st.session_state:
         result: dict = st.session_state["audit_result"]
-        filename: str = st.session_state.get("audit_filename", "document.pdf")
+        filename: str = st.session_state.get("audit_filename", "loan_kfs.pdf")
         overall: str = result.get("overall_assessment", "Insufficient Evidence")
         checks: list = result.get("checks", [])
         category_counts = {
@@ -209,8 +218,8 @@ with audit_tab:
         }
 
         st.divider()
-        st.subheader("AI-generated assessment")
-        st.markdown(f"**Document:** {filename} · **Overall:** {overall}")
+        st.subheader("KFS Compliance Assessment")
+        st.markdown(f"**Loan KFS:** {filename} · **Overall assessment:** {overall}")
         st.caption("Decision support only. Interpret findings against the cited source documents; a human reviewer makes the decision.")
 
         summary_cols = st.columns(3)
@@ -218,7 +227,7 @@ with audit_tab:
         summary_cols[1].metric("Potential Gap", category_counts["Potential Gap"])
         summary_cols[2].metric("Insufficient Evidence", category_counts["Insufficient Evidence"])
 
-        st.subheader("Validation results")
+        st.subheader("Regulatory Compliance Findings")
         category_icons = {"Compliant": "✓", "Potential Gap": "!", "Insufficient Evidence": "?"}
         for check in checks:
             category = check.get("category", "Insufficient Evidence")
@@ -257,7 +266,7 @@ with audit_tab:
         report_bytes = build_audit_pdf(filename, result)
         safe_filename = Path(filename).stem.replace(" ", "_")
         st.download_button(
-            "Download AI assessment report (PDF)",
+            "Download Loan KFS assessment report (PDF)",
             data=report_bytes,
             file_name=f"{safe_filename}_ai_assessment.pdf",
             mime="application/pdf",
