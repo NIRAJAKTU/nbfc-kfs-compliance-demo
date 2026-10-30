@@ -1,8 +1,8 @@
-# Harvey for Finance (Hosted Demo MVP)
+# AI-Native Financial Document Intelligence (Portfolio Demo)
 
-AI-Native Compliance Auditor for Indian NBFC digital lending flows.
+An AI/GenAI portfolio demonstration of financial document intelligence and evidence-grounded regulatory analysis.
 
-This is a prototype that audits a draft KFS/loan PDF against the PDF rule sources in `rbi_documents/`. It uses local PDF retrieval and Groq-hosted model inference. It is not legal advice or an authoritative compliance decision.
+This independent demonstration uses synthetic regulatory reference documents and sample financial documents. It is not an official RBI compliance system, does not establish regulatory compliance and is not intended for production financial decision-making.
 
 ---
 
@@ -41,17 +41,18 @@ The app reads the configured source PDFs directly; no separate vector index is b
 
 ---
 
-## What This MVP Does (Simple)
+## What This Demo Does
 
 1. You upload a draft KFS/loan PDF in the web app.
 2. System extracts text from your PDF.
 3. System retrieves relevant passages from configured rule PDFs and retains their file/page references.
-4. Groq-hosted LLM checks 4 items:
+4. Groq-hosted LLM assesses four topics:
    - APR disclosure
    - Penal charges as flat fee (no compounding)
    - Cooling-off/look-up period
    - Nodal grievance officer details
-5. App returns PASS/FAIL with exact violations and fixes.
+5. The app returns one category per check: `Compliant`, `Potential Gap`, or `Insufficient Evidence`.
+6. The reviewer can inspect KFS page excerpts and retrieved rule passages, see recommended actions, and download a PDF assessment report.
 
 ---
 
@@ -61,12 +62,12 @@ Input PDF -> Text Extractor -> RBI Rule Retriever -> LLM Auditor -> JSON Result 
 
 ### Practical flow
 - RBI rule PDFs are bundled in `rbi_documents/` and read directly by the app.
-- During audit, lightweight keyword scoring retrieves relevant, page-labeled passages.
+- During audit, lightweight lexical scoring retrieves topic-relevant, page-labeled passages.
 - LLM receives:
   1) strict compliance instructions,
-  2) retrieved RBI context,
-  3) uploaded KFS text,
-  and returns a strict JSON audit report.
+  2) retrieved source passages with evidence IDs,
+  3) extracted KFS text with page IDs,
+  and returns a structured JSON assessment that is validated before display.
 
 ---
 
@@ -76,7 +77,7 @@ Input PDF -> Text Extractor -> RBI Rule Retriever -> LLM Auditor -> JSON Result 
 - Fastest way to build a clean web UI in Python.
 - Great for internal demos with minimal frontend effort.
 
-### Groq
+### Groq + GPT-OSS 120B
 - Provides hosted model inference, so the public app does not need a GPU or a local Ollama server.
 - Requires an API key stored in Streamlit Secrets; free-tier availability and usage limits are controlled by Groq.
 
@@ -100,13 +101,13 @@ If you want to understand the project quickly, read files in this order:
 
 1. `app.py`
    - UI and demo entry point.
-   - Handles PDF upload, button click, spinner, PASS/FAIL rendering, and showing violation cards.
-   - Calls the audit engine when user clicks `Run RBI Audit`.
+  - Handles bounded PDF upload, staged processing indicators, three-category result cards, evidence display, and report download.
+  - Includes Business Challenges, AI Architecture, and AI Solutions tabs for portfolio viewers.
 
 2. `audit_engine.py`
    - Main business logic for compliance checking.
    - Core function: `audit_kfs_document(pdf_path)`.
-  - Extracts KFS text, retrieves source/page-labeled passages, calls Groq, validates the JSON result.
+  - Extracts KFS text, retrieves source/page-labeled passages, calls Groq, validates evidence IDs and the JSON result.
    - If you want to understand the actual audit flow, this is the most important file.
 
 3. `ingest_rbi.py`
@@ -117,10 +118,16 @@ If you want to understand the project quickly, read files in this order:
   - Holds Groq model, source directory, chunking, retrieval, and upload limits.
    - Change this file if you want to switch model or tune retrieval behavior.
 
+5. `audit_report.py`
+  - Creates the downloadable PDF assessment, including per-check findings, evidence references, recommendations, and the demonstration disclaimer.
+
 ### Supporting files
 
 - `requirements.txt`
   - Dependency list used to recreate the environment.
+
+- `.streamlit/config.toml`
+  - Streamlit UI configuration, including upload-size limit and telemetry preference.
 
 - `README.md`
   - Beginner-friendly explanation of setup, architecture, and demo flow.
@@ -144,6 +151,7 @@ If you want to understand the project quickly, read files in this order:
 
 - `app.py` = interface
 - `audit_engine.py` = core audit brain
+- `audit_report.py` = downloadable PDF report
 - `ingest_rbi.py` = checks RBI source PDFs
 - `config.py` = controls behavior
 
@@ -163,17 +171,19 @@ If you want to understand the project quickly, read files in this order:
 - Chunking:
   Splitting long documents into smaller pieces so retrieval is accurate and efficient.
 
-- Compliance Rule Engine (in this MVP):
-  A strict prompt + retrieved RBI clauses that force a PASS/FAIL JSON decision.
+- Structured LLM output:
+  A machine-readable assessment with one of three categories per check, validated against retrieved evidence references.
 
 ---
 
 ## MVP Scope (Current)
 
 Included now:
-- Hosted Groq-based RBI KFS prototype
-- PASS/FAIL with actionable violation messages
-- Local PDF source retrieval with page labels
+- Hosted Groq-based financial document intelligence demonstration
+- RAG-style lexical retrieval and source/page evidence display
+- Three-category assessments and downloadable PDF reports
+- Business challenges, AI architecture, and implementation contact tabs
+- Sample-oriented safeguards and explicit synthetic-data disclaimer
 
 Not included yet:
 - Multi-tenant auth and role controls
@@ -209,4 +219,4 @@ Use synthetic KFS examples only while the synthetic sample RBI document is confi
 3. Add `GROQ_API_KEY` under the deployed app's Settings → Secrets. Never put the real key in GitHub or chat.
 4. Open the URL assigned by Streamlit and test with synthetic PDFs only.
 
-The app has 10 MB upload and 25-page limits. Extracted KFS text and retrieved rule passages are sent to Groq. This prototype is not legal advice; do not use it with confidential borrower information.
+The app has 10 MB upload and 25-page limits. Extracted KFS text and retrieved rule passages are sent to Groq. Outputs are AI-generated demonstration assessments for human review, not legal advice or production decisions. Do not upload confidential borrower information.

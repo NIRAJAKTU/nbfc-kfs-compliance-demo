@@ -14,15 +14,44 @@ from pathlib import Path
 
 import streamlit as st
 import config
+from audit_report import DISCLAIMER, build_audit_pdf
 
 # ---------------------------------------------------------------------------
 # Page configuration (must be the first Streamlit call)
 # ---------------------------------------------------------------------------
 st.set_page_config(
-    page_title="KFS Compliance Auditor | RBI Digital Lending",
+    page_title="AI Financial Document Intelligence | Demo",
     page_icon="⚖️",
     layout="wide",
     initial_sidebar_state="expanded",
+)
+
+st.markdown(
+    """
+    <style>
+    :root {
+        --ink: #102a43;
+        --muted: #526579;
+        --line: #d7e0e8;
+        --surface: #ffffff;
+        --canvas: #f4f7fa;
+        --teal: #087e83;
+    }
+    .stApp { background: var(--canvas); color: var(--ink); }
+    [data-testid="stHeader"] { background: rgba(244,247,250,.94); }
+    [data-testid="stTabs"] [role="tablist"] { gap: .45rem; border-bottom: 1px solid var(--line); }
+    [data-testid="stTabs"] button[role="tab"] { color: var(--muted); font-weight: 650; }
+    [data-testid="stTabs"] button[aria-selected="true"] { color: var(--teal); }
+    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] { gap: .85rem; }
+    [data-testid="stFileUploader"] section { background: var(--surface); border-color: #9fb3c5; }
+    [data-testid="stMetric"] { background: var(--surface); border: 1px solid var(--line); padding: .8rem; border-radius: 8px; }
+    @media (max-width: 720px) {
+        [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: .5rem; }
+        [data-testid="stHorizontalBlock"] > [data-testid="column"] { min-width: 100% !important; }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -49,8 +78,8 @@ uses_sample_rules = any("sample" in path.name.lower() for path in rbi_pdf_paths)
 # Sidebar
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    st.title("⚖️ Harvey for Finance")
-    st.caption("AI-Native Compliance Infrastructure for Indian NBFCs")
+    st.title("AI-Native Financial Document Intelligence")
+    st.caption("Regulatory analysis · Independent AI/GenAI portfolio demo")
 
     st.divider()
 
@@ -93,21 +122,18 @@ with st.sidebar:
 # Main panel
 # ---------------------------------------------------------------------------
 audit_tab, why_tab, architecture_tab, contact_tab = st.tabs(
-    ["KFS Audit", "Why this exists", "AI Architecture", "Contact"]
+    ["Document Intelligence", "Business Challenges", "AI Architecture", "AI Solutions"]
 )
 
 with audit_tab:
-    st.title("RBI KFS Compliance Auditor")
+    st.title("AI-Powered Financial Document Intelligence")
     st.markdown(
-        "Upload a draft **Key Fact Statement (KFS)** or **Loan Agreement** to perform a "
-        "prototype review against the configured RBI source PDFs."
+        "An intelligent document analysis engine demonstrating how Generative AI, RAG and "
+        "evidence-grounded reasoning can streamline financial document review."
     )
 
-    st.warning(
-        "**Prototype only.** This is not legal advice or an authoritative compliance decision. "
-        "Do not upload real borrower or confidential information. Uploaded PDF text is sent to Groq for analysis.",
-        icon="⚠️",
-    )
+    st.warning(DISCLAIMER, icon="⚠️")
+    st.caption("AI-generated demonstration assessment · Human review required · Do not upload confidential documents")
 
     if uses_sample_rules:
         st.error(
@@ -125,9 +151,9 @@ with audit_tab:
     st.divider()
 
     uploaded_file = st.file_uploader(
-        label="Drag and drop or browse your draft KFS / Loan Agreement",
+        label="Upload a sample financial document",
         type=["pdf"],
-        help=f"Text-based PDF only; maximum {config.MAX_UPLOAD_MB} MB and {config.MAX_KFS_PAGES} pages.",
+        help=f"Text-based PDF only · up to {config.MAX_UPLOAD_MB} MB · up to {config.MAX_KFS_PAGES} pages.",
         label_visibility="visible",
     )
 
@@ -138,10 +164,27 @@ with audit_tab:
         if upload_too_large:
             st.error(f"File is {file_size_mb:.1f} MB; the limit is {config.MAX_UPLOAD_MB} MB.")
         else:
-            st.success(f"Uploaded: **{uploaded_file.name}** | {file_size_mb:.1f} MB", icon="📄")
+            from pypdf import PdfReader
+            from io import BytesIO
+
+            try:
+                page_count = len(PdfReader(BytesIO(uploaded_bytes)).pages)
+            except Exception:
+                page_count = 0
+            if not page_count:
+                st.error("This file could not be read as a PDF. Choose a valid, text-based PDF.")
+                upload_too_large = True
+            elif page_count > config.MAX_KFS_PAGES:
+                st.error(f"This PDF has {page_count} pages; the limit is {config.MAX_KFS_PAGES} pages.")
+                upload_too_large = True
+            else:
+                st.success(
+                    f"Ready for analysis · **{uploaded_file.name}** · {page_count} pages · {file_size_mb:.1f} MB",
+                    icon="📄",
+                )
 
         run_btn = st.button(
-            label="⚖️ Run RBI Audit",
+            label="Analyze document",
             type="primary",
             use_container_width=True,
             disabled=not prereqs_ok or upload_too_large,
@@ -154,9 +197,18 @@ with audit_tab:
                 tmp_path = tmp.name
 
             try:
-                with st.spinner("Retrieving rule excerpts and requesting the audit…"):
+                with st.status("Preparing document intelligence workflow…", expanded=True) as progress:
                     from audit_engine import audit_kfs_document
-                    result = audit_kfs_document(tmp_path, api_key=groq_api_key)
+
+                    def report_stage(stage: str) -> None:
+                        progress.update(label=stage, state="running", expanded=True)
+
+                    result = audit_kfs_document(
+                        tmp_path,
+                        api_key=groq_api_key,
+                        progress_callback=report_stage,
+                    )
+                    progress.update(label="Assessment generated · Ready for human review", state="complete", expanded=False)
 
                 st.session_state["audit_result"] = result
                 st.session_state["audit_filename"] = uploaded_file.name
@@ -178,45 +230,68 @@ with audit_tab:
     if "audit_result" in st.session_state:
         result: dict = st.session_state["audit_result"]
         filename: str = st.session_state.get("audit_filename", "document.pdf")
-        status: str = result.get("status", "FAIL").upper()
-        violations: list = result.get("violations", [])
+        overall: str = result.get("overall_assessment", "Insufficient Evidence")
+        checks: list = result.get("checks", [])
+        category_counts = {
+            category: sum(item.get("category") == category for item in checks)
+            for category in ("Compliant", "Potential Gap", "Insufficient Evidence")
+        }
 
         st.divider()
-        st.subheader(f"Audit Report — {filename}")
+        st.subheader("AI-generated assessment")
+        st.markdown(f"**Document:** {filename} · **Overall:** {overall}")
+        st.caption("Decision support only. Interpret findings against the cited source documents; a human reviewer makes the decision.")
 
-        if status == "PASS":
-            st.success(
-                "**COMPLIANT — PASS** &nbsp; This KFS satisfies all checked RBI Digital Lending mandates.",
-                icon="✅",
-            )
-        else:
-            st.error(
-                f"**NON-COMPLIANT — FAIL** &nbsp; {len(violations)} violation(s) detected. "
-                "Review each finding against the cited source and have a qualified compliance professional assess it.",
-                icon="❌",
-            )
+        summary_cols = st.columns(3)
+        summary_cols[0].metric("Compliant", category_counts["Compliant"])
+        summary_cols[1].metric("Potential Gap", category_counts["Potential Gap"])
+        summary_cols[2].metric("Insufficient Evidence", category_counts["Insufficient Evidence"])
 
-        m_col1, m_col2, m_col3 = st.columns(3)
-        m_col1.metric("Audit Status", status)
-        m_col2.metric("Violations Found", len(violations))
-        m_col3.metric("Checks Performed", 4, help="APR · Penal Charges · Cooling-Off Period · Grievance Officer")
+        st.subheader("Validation results")
+        category_icons = {"Compliant": "✓", "Potential Gap": "!", "Insufficient Evidence": "?"}
+        for check in checks:
+            category = check.get("category", "Insufficient Evidence")
+            with st.container(border=True):
+                st.markdown(f"### {category_icons.get(category, '•')} {check.get('check', 'Document check')} · {category}")
+                st.write(check.get("finding", "No finding was generated."))
 
-        if violations:
-            st.subheader("Violation Details")
-            for idx, violation in enumerate(violations, start=1):
-                issue_title = violation.get("issue", "Unknown Issue")
-                with st.expander(f"Violation {idx} of {len(violations)}: {issue_title}", expanded=True):
-                    left, right = st.columns([1, 1])
-                    with left:
-                        st.markdown("##### Issue Detected")
-                        st.write(violation.get("issue", "—"))
-                        st.markdown("##### RBI Clause / Reference")
-                        st.code(violation.get("rbi_clause", "—"), language=None)
-                    with right:
-                        st.markdown("##### Required Fix")
-                        st.warning(violation.get("required_fix", "—"), icon="✏️")
-        elif status == "PASS":
-            st.info("No violations found. All 4 RBI compliance checks passed.", icon="ℹ️")
+                document_details = check.get("document_details", [])
+                source_details = check.get("source_details", [])
+                evidence_col, source_col = st.columns(2)
+                with evidence_col:
+                    st.markdown("**Document evidence**")
+                    if document_details:
+                        for item in document_details:
+                            st.caption(item.get("reference", "KFS page"))
+                            st.code(item.get("excerpt", ""), language=None)
+                    else:
+                        st.caption("No specific KFS page was cited.")
+                with source_col:
+                    st.markdown("**Retrieved source references**")
+                    if source_details:
+                        for item in source_details:
+                            st.caption(f"{item.get('source', 'Rule source')} · page {item.get('page', '?')} · ref {item.get('id', '')}")
+                            st.write(item.get("text", ""))
+                    else:
+                        st.caption("No supporting rule passage was retrieved for this check.")
+
+                st.markdown("**Recommended next action**")
+                if category == "Potential Gap":
+                    st.warning(check.get("recommended_action", "Review this disclosure with a compliance professional."), icon="!")
+                elif category == "Insufficient Evidence":
+                    st.info(check.get("recommended_action", "Review the source document and KFS manually."), icon="ℹ️")
+                else:
+                    st.success(check.get("recommended_action", "No corrective action suggested by this demonstration."), icon="✓")
+
+        report_bytes = build_audit_pdf(filename, result)
+        safe_filename = Path(filename).stem.replace(" ", "_")
+        st.download_button(
+            "Download AI assessment report (PDF)",
+            data=report_bytes,
+            file_name=f"{safe_filename}_ai_assessment.pdf",
+            mime="application/pdf",
+            type="secondary",
+        )
 
         with st.expander("View Raw JSON Audit Report"):
             st.json(result)
@@ -227,20 +302,17 @@ with audit_tab:
             st.rerun()
 
 with why_tab:
-    st.title("Why this exists")
+    st.title("Business Challenges & AI Opportunities")
     st.markdown(
-        "A regulatory requirement only protects customers when it is translated into a "
-        "repeatable operational check. When a loan disclosure is incomplete, a pricing "
-        "control is missed, or a required process is not followed, the consequences can "
-        "include customer harm, remediation, restrictions on new business, financial "
-        "penalties, and in serious cases licence action."
+        "Financial institutions work across changing regulations, high-volume documents, "
+        "multiple systems, and human review queues. Missed or unclear information can increase "
+        "customer harm, remediation work, operational friction, and supervisory risk. AI can "
+        "help teams surface relevant information sooner while keeping accountable decisions with people."
     )
     st.markdown(
-        "This project explores a specific prevention point in digital lending: review the "
-        "Key Fact Statement **before disbursal**, compare it with configured regulatory "
-        "evidence, and surface potential gaps for a compliance professional to resolve. "
-        "The aim is to move checks closer to the operational decision, not to replace "
-        "compliance teams or claim that one KFS check prevents every enforcement event."
+        "This portfolio demo focuses on one narrow use case: **AI-assisted review of a "
+        "digital lending KFS before disbursal**, comparing selected disclosures with supplied "
+        "regulatory passages and surfacing evidence-backed questions for a human reviewer."
     )
 
     st.subheader("Regulatory events that show the stakes")
@@ -266,6 +338,33 @@ with why_tab:
         "These events have different facts and legal bases. This KFS tool only checks four disclosure topics; "
         "it would not have prevented every issue in these cases."
     )
+
+    st.subheader("Where AI may help financial institutions")
+    opportunity_cols = st.columns(2)
+    opportunities = [
+        ("Automated document intelligence", "Extract fields, classify documents, compare versions, and route exceptions for review."),
+        ("Regulatory document analysis", "Search circulars and directions, summarize changes, and link findings back to source clauses."),
+        ("Compliance workflow automation", "Prepare review queues, evidence packs, and escalation tasks while retaining human approvals."),
+        ("Financial document extraction", "Read KFS, agreements, statements, and applications into structured data for downstream systems."),
+        ("Intelligent reporting", "Draft concise summaries, exception reports, and audit-ready evidence references from validated inputs."),
+        ("Human-assisted decision support", "Give specialists traceable context and recommendations without handing decisions to an autonomous model."),
+    ]
+    for index, (title, detail) in enumerate(opportunities):
+        with opportunity_cols[index % 2]:
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                st.write(detail)
+
+    with st.expander("Future opportunities (not implemented in this demo)"):
+        st.markdown(
+            "- Regulatory change monitoring with human-approved impact assessments\n"
+            "- Policy and SOP change proposals with source-linked redlines\n"
+            "- LOS/workflow integrations that pause or route exceptions before disbursal\n"
+            "- Agentic AI workflows for multi-step execution with approval gates\n"
+            "- Multi-regulator and organization-specific knowledge spaces\n"
+            "- Evaluation dashboards for retrieval quality, false positives, and reviewer feedback\n\n"
+            "These are future opportunities, not capabilities implemented in this demo."
+        )
 
     st.warning(
         "The current bundled RBI PDF is synthetic demo material. Replace it with verified official source documents "
@@ -324,39 +423,43 @@ with architecture_tab:
         icon="🧠",
     )
 
-    st.subheader("AI / GenAI concepts demonstrated")
+    st.subheader("AI / GenAI capabilities demonstrated")
     concepts = [
         (
-            "Document chunking + provenance",
-            "Long rulebooks are divided into overlapping passages. Each passage keeps its source PDF and page number so retrieved evidence can be traced back.",
+            "Intelligent Document Processing (IDP) + chunking",
+            "Extract text and page-level context from PDFs, then split long regulatory documents into overlapping passages with provenance.",
         ),
         (
-            "Local rule corpus",
-            "Configured RBI documents form the bounded knowledge base. The model receives selected excerpts instead of being asked to recall regulations from training memory.",
+            "Bounded local rule corpus",
+            "Configured regulatory PDFs form the evidence base; selected excerpts are supplied to the model instead of asking it to recall rules from training memory.",
         ),
         (
-            "Lexical retrieval in a RAG pipeline",
-            "Topic-focused queries rank passages by term relevance, then provide those passages as context to generation. This MVP uses lightweight lexical search; it is not an embedding/vector search system.",
+            "RAG + context-aware regulatory analysis",
+            "Four topic queries rank relevant passages by lexical relevance. This lightweight MVP does not use embeddings or vector search.",
         ),
         (
-            "Prompt design + task decomposition",
-            "Four compliance questions are made explicit, with instructions to use only supplied context, fail closed when evidence is missing, and avoid invented citations.",
+            "Multi-stage workflow + prompt design",
+            "Extraction → topic-specific retrieval → LLM assessment → reference validation → human review, with instructions to avoid unsupported citations.",
         ),
         (
-            "LLM inference",
-            "Groq serves the configured GPT-OSS 120B model. It compares extracted KFS text with retrieved evidence and drafts a structured assessment; uploaded text is sent to the model provider.",
+            "LLM-powered document intelligence",
+            "Groq serves GPT-OSS 120B to compare KFS text with retrieved passages and draft a structured assessment; uploaded text is sent to the provider.",
         ),
         (
-            "Structured generation + validation",
-            "JSON-mode output is checked for the expected status and violations fields before the UI displays it, reducing malformed-response failures.",
+            "Structured outputs + explainable evidence (XAI)",
+            "JSON-mode results use validated KFS page IDs and retrieved rule IDs, making the supporting evidence visible for reviewer inspection.",
         ),
         (
-            "Human-in-the-loop review",
-            "The result is an assistive finding, not an autonomous compliance verdict. A qualified reviewer checks the cited document and makes the decision.",
+            "Human-in-the-loop (HITL) decision support",
+            "This is an assistive finding, not an autonomous decision. A qualified reviewer verifies evidence and owns any business or compliance action.",
         ),
     ]
-    for concept, explanation in concepts:
-        st.markdown(f"**{concept}**  \n{explanation}")
+    concept_cols = st.columns(2)
+    for index, (concept, explanation) in enumerate(concepts):
+        with concept_cols[index % 2]:
+            with st.container(border=True):
+                st.markdown(f"**{concept}**")
+                st.caption(explanation)
 
     st.warning(
         "Current limitation: rules bundled with this demo are synthetic. Replace them with verified official RBI documents, "
@@ -365,13 +468,30 @@ with architecture_tab:
     )
 
 with contact_tab:
-    st.title("Contact")
+    st.title("AI Solutions & Implementation")
     st.markdown(
-        "Have a business challenge, an NBFC workflow, or an AI idea you want to explore? "
-        "I can connect your use case with my AI, GenAI, and emerging-technology skills, then work with you "
-        "to build a practical solution around what your business needs. Reach out to discuss your goal, "
-        "shape the approach, or explore an implementation together."
+        "I build AI and GenAI solutions that connect a real business use case to a practical application. "
+        "I can work with your team to understand the workflow, shape the right technical approach, "
+        "and build a proof of concept, MVP, or integration around what the business needs."
     )
-    st.markdown("**Email**  \n[singhn9282@gmail.com](mailto:singhn9282@gmail.com)")
-    st.markdown("**LinkedIn**  \n[Connect with Niraj](https://www.linkedin.com/in/niraj-s-8b9984152/)")
+    service_cols = st.columns(2)
+    services = [
+        "Generative AI application development",
+        "Custom LLM and RAG solutions",
+        "Agentic AI and AI workflow automation",
+        "Intelligent document processing",
+        "AI-powered business process automation",
+        "Enterprise AI integration",
+        "AI consulting, PoC and MVP development",
+    ]
+    for index, service in enumerate(services):
+        with service_cols[index % 2]:
+            st.markdown(f"- {service}")
+
+    st.subheader("Have an AI idea or business challenge? Let's build a solution.")
+    contact_col1, contact_col2 = st.columns(2)
+    with contact_col1:
+        st.link_button("Email Niraj", "mailto:singhn9282@gmail.com", use_container_width=True)
+    with contact_col2:
+        st.link_button("Connect on LinkedIn", "https://www.linkedin.com/in/niraj-s-8b9984152/", use_container_width=True)
     st.caption("Please do not send confidential customer, borrower, or regulated data through this public demo.")

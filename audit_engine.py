@@ -8,26 +8,34 @@ import os
 import re
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from groq import Groq
 from pypdf import PdfReader
 
 import config
 
-COMPLIANCE_SYSTEM_PROMPT = """You are an elite, ruthless Chief Compliance Officer for an Indian NBFC.
-Your sole job is to audit a draft Key Fact Statement (KFS) for a digital loan against the official RBI Digital Lending Guidelines provided in your knowledge base.
-Evaluate the KFS based ONLY on the provided RBI context. Do NOT use outside knowledge.
-Check: 1) APR explicitly stated and inclusive of all upfront fees; 2) penal charges are a flat fee, not compounded penal interest; 3) an explicit cooling-off/look-up period is stated; 4) name and contact details of the Nodal Grievance Officer are provided.
-Return only JSON: {"status":"PASS"|"FAIL","violations":[{"issue":"...","rbi_clause":"...","required_fix":"..."}]}
-If the provided context does not support a check, report FAIL with issue "UNABLE TO VERIFY DUE TO MISSING RBI CONTEXT". Cite only clause/page/source details explicitly present in context. Never invent citations. This is a preliminary AI review, not legal advice."""
+COMPLIANCE_SYSTEM_PROMPT = """You are an AI document-analysis assistant supporting a qualified Indian NBFC compliance reviewer.
+Analyze a draft digital-loan Key Fact Statement against ONLY the RBI source evidence supplied in this request. Do not use outside knowledge and do not invent clauses, page numbers, quotations, or citations.
+
+Assess these four checks independently: APR and upfront fee disclosure; flat penal charges versus compounding; cooling-off/look-up period; nodal grievance officer identity/contact details.
+
+For each check choose exactly one category:
+- Compliant: the KFS shows the required item and supplied RBI evidence supports the requirement.
+- Potential Gap: the KFS evidence indicates a missing, unclear, or conflicting disclosure and supplied RBI evidence supports the requirement.
+- Insufficient Evidence: either the KFS text or supplied RBI evidence is not enough to assess the item.
+
+Return exactly four checks named "APR transparency", "Penal charges", "Cooling-off period", and "Grievance officer". Return only JSON with this shape:
+{"overall_assessment":"Compliant|Potential Gap|Insufficient Evidence","checks":[{"check":"APR transparency","category":"Compliant|Potential Gap|Insufficient Evidence","finding":"...","document_evidence":"short exact quote from KFS or explain absence","document_pages":["K1"],"rule_evidence":["R1"],"recommended_action":"..."}]}
+Use only the supplied K page IDs and R evidence IDs. If a check cannot be verified, choose Insufficient Evidence. These are AI-generated demonstration assessments, not legal advice or a final regulatory decision."""
 
 CHECK_QUERIES = (
-    "annual percentage rate APR all upfront fees processing charges KFS",
-    "penal charges flat fee penal interest compounding default delay",
-    "cooling-off period look-up period exit loan prepayment penalty days",
-    "grievance redressal nodal officer name email phone contact KFS",
+    ("APR transparency", "annual percentage rate APR all upfront fees processing charges KFS"),
+    ("Penal charges", "penal charges flat fee penal interest compounding default delay"),
+    ("Cooling-off period", "cooling-off period look-up period exit loan prepayment penalty days"),
+    ("Grievance officer", "grievance redressal nodal officer name email phone contact KFS"),
 )
+VALID_CATEGORIES = {"Compliant", "Potential Gap", "Insufficient Evidence"}
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+", re.IGNORECASE)
 
 
@@ -100,7 +108,7 @@ def _rank_chunks(query: str, chunks: tuple[dict[str, Any], ...], limit: int) -> 
     return [chunk for _, chunk in ranked[:limit]]
 
 
-def _extract_pdf_text(pdf_path: str) -> str:
+def _extract_pdf_pages(pdf_path: str) -> list[dict[str, Any]]:
     path = Path(pdf_path)
     if not path.is_file():
         raise RuntimeError(f"KFS PDF not found: {path}")
@@ -108,68 +116,166 @@ def _extract_pdf_text(pdf_path: str) -> str:
         reader = PdfReader(str(path))
         if len(reader.pages) > config.MAX_KFS_PAGES:
             raise RuntimeError(f"PDF has {len(reader.pages)} pages; demo limit is {config.MAX_KFS_PAGES}.")
-        text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        pages = [
+            {"id": f"K{page_number}", "page": page_number, "text": page.extract_text() or ""}
+            for page_number, page in enumerate(reader.pages, start=1)
+        ]
     except RuntimeError:
         raise
     except Exception as exc:
         raise RuntimeError(f"Could not read the uploaded PDF: {exc}") from exc
-    if not text:
+    pages = [page for page in pages if page["text"].strip()]
+    if not pages:
         raise RuntimeError("The PDF has no extractable text. Scanned/image-only PDFs are not supported.")
-    return text[:config.MAX_KFS_TEXT_CHARS]
+    remaining = config.MAX_KFS_TEXT_CHARS
+    bounded_pages = []
+    for page in pages:
+        if remaining <= 0:
+            break
+        text = page["text"][:remaining]
+        bounded_pages.append({**page, "text": text})
+        remaining -= len(text)
+    return bounded_pages
 
 
-def _validate_report(data: Any) -> dict[str, Any]:
-    if not isinstance(data, dict) or data.get("status") not in {"PASS", "FAIL"}:
-        raise ValueError("The model returned an invalid audit report.")
-    violations = data.get("violations")
-    if not isinstance(violations, list):
-        raise ValueError("The model returned an invalid violations list.")
-    clean = []
-    for item in violations:
-        if not isinstance(item, dict):
-            raise ValueError("The model returned a malformed violation.")
-        clean.append({
-            "issue": str(item.get("issue", "Unspecified issue")),
-            "rbi_clause": str(item.get("rbi_clause", "Not cited")),
-            "required_fix": str(item.get("required_fix", "Review against the cited source.")),
+def _overall_assessment(checks: list[dict[str, Any]]) -> str:
+    categories = {item["category"] for item in checks}
+    if "Potential Gap" in categories:
+        return "Potential Gap"
+    if "Insufficient Evidence" in categories:
+        return "Insufficient Evidence"
+    return "Compliant"
+
+
+def _validate_report(
+    data: Any,
+    evidence_by_check: dict[str, list[dict[str, Any]]],
+    document_pages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Validate model categories and keep only references actually provided to it."""
+    if not isinstance(data, dict) or not isinstance(data.get("checks"), list):
+        raise ValueError("The model returned an invalid assessment structure.")
+
+    document_ids = {page["id"] for page in document_pages}
+    document_map = {page["id"]: page for page in document_pages}
+    checks_by_name = {item["check"]: item for item in data["checks"] if isinstance(item, dict)}
+    validated = []
+    for check_name, _ in CHECK_QUERIES:
+        item = checks_by_name.get(check_name)
+        available_rules = evidence_by_check.get(check_name, [])
+        if not item or not available_rules:
+            validated.append({
+                "check": check_name,
+                "category": "Insufficient Evidence",
+                "finding": "The available document context was insufficient to assess this check.",
+                "document_evidence": "Not established from the supplied KFS text.",
+                "document_pages": [],
+                "rule_evidence": [],
+                "source_details": [],
+                "recommended_action": "Have a compliance reviewer inspect the KFS and the applicable official rule source.",
+            })
+            continue
+
+        category = item.get("category")
+        doc_refs = item.get("document_pages", [])
+        rule_refs = item.get("rule_evidence", [])
+        if not isinstance(doc_refs, list) or not isinstance(rule_refs, list):
+            category = "Insufficient Evidence"
+            doc_refs, rule_refs = [], []
+        doc_refs = [ref for ref in doc_refs if isinstance(ref, str) and ref in document_ids]
+        rule_map = {source["id"]: source for source in available_rules}
+        rule_refs = [ref for ref in rule_refs if isinstance(ref, str) and ref in rule_map]
+        if category not in VALID_CATEGORIES or not rule_refs:
+            category = "Insufficient Evidence"
+        if category != "Insufficient Evidence" and not doc_refs:
+            category = "Insufficient Evidence"
+
+        validated.append({
+            "check": check_name,
+            "category": category,
+            "finding": str(item.get("finding", "No finding supplied.")),
+            "document_evidence": str(item.get("document_evidence", "No exact document excerpt supplied.")),
+            "document_pages": doc_refs,
+            "document_details": [
+                {
+                    "reference": f"{ref}, page {document_map[ref]['page']}",
+                    "excerpt": document_map[ref]["text"][:700],
+                }
+                for ref in doc_refs
+            ],
+            "rule_evidence": rule_refs,
+            "source_details": [rule_map[ref] for ref in rule_refs],
+            "recommended_action": str(item.get("recommended_action", "Review with a qualified compliance professional.")),
         })
-    return {"status": "FAIL" if clean else data["status"], "violations": clean}
+
+    return {"overall_assessment": _overall_assessment(validated), "checks": validated}
 
 
-def audit_kfs_document(pdf_path: str, api_key: str | None = None) -> dict[str, Any]:
+def audit_kfs_document(
+    pdf_path: str,
+    api_key: str | None = None,
+    progress_callback: Callable[[str], None] | None = None,
+) -> dict[str, Any]:
     """Audit a KFS PDF using local RBI PDFs and Groq hosted inference."""
+    def report_progress(message: str) -> None:
+        if progress_callback:
+            progress_callback(message)
+
     api_key = api_key or os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError("Groq API key is missing. Add GROQ_API_KEY to Streamlit Secrets.")
 
-    kfs_text = _extract_pdf_text(pdf_path)
+    report_progress("Extracting document text and page references")
+    document_pages = _extract_pdf_pages(pdf_path)
     chunks = _get_rule_chunks()
     if not chunks:
-        return {"status": "FAIL", "violations": [{
-            "issue": "UNABLE TO VERIFY DUE TO MISSING RBI CONTEXT",
-            "rbi_clause": "No readable RBI PDF sources are configured.",
-            "required_fix": "Add verified official RBI guideline PDFs to the rbi_documents folder.",
-        }]}
+        return {
+            "overall_assessment": "Insufficient Evidence",
+            "checks": [{
+                "check": check_name,
+                "category": "Insufficient Evidence",
+                "finding": "No readable regulatory reference passages are configured.",
+                "document_evidence": "Not assessed because regulatory context is missing.",
+                "document_pages": [],
+                "rule_evidence": [],
+                "source_details": [],
+                "recommended_action": "Add and verify the applicable official regulatory PDFs before running an assessment.",
+            } for check_name, _ in CHECK_QUERIES],
+        }
 
-    evidence: list[dict[str, Any]] = []
-    seen: set[tuple[str, int, str]] = set()
-    for query in CHECK_QUERIES:
-        for chunk in _rank_chunks(query, chunks, config.RETRIEVAL_CHUNKS_PER_CHECK):
+    report_progress("Retrieving rule passages for each audit topic")
+    evidence_by_check: dict[str, list[dict[str, Any]]] = {}
+    all_rules: dict[tuple[str, int, str], dict[str, Any]] = {}
+    evidence_index = 1
+    for check_name, query in CHECK_QUERIES:
+        matches = _rank_chunks(query, chunks, config.RETRIEVAL_CHUNKS_PER_CHECK)
+        check_evidence = []
+        for chunk in matches:
             identity = (chunk["source"], chunk["page"], chunk["text"])
-            if identity not in seen:
-                seen.add(identity)
-                evidence.append(chunk)
-    if not evidence:
-        return {"status": "FAIL", "violations": [{
-            "issue": "UNABLE TO VERIFY DUE TO MISSING RBI CONTEXT",
-            "rbi_clause": "No relevant text was retrieved from configured sources.",
-            "required_fix": "Check that official RBI PDFs contain text and cover these requirements.",
-        }]}
+            if identity not in all_rules:
+                all_rules[identity] = {**chunk, "id": f"R{evidence_index}"}
+                evidence_index += 1
+            check_evidence.append(all_rules[identity])
+        evidence_by_check[check_name] = check_evidence
 
-    context = "\n\n".join(
-        f"[Source: {item['source']}, page {item['page']}]\n{item['text']}" for item in evidence
+    rule_context_parts = []
+    for check_name, _ in CHECK_QUERIES:
+        check_rules = evidence_by_check.get(check_name, [])
+        rule_context_parts.append(f"CHECK: {check_name}")
+        if check_rules:
+            rule_context_parts.extend(
+                f"[{item['id']}] Source: {item['source']}, page {item['page']}\n{item['text']}"
+                for item in check_rules
+            )
+        else:
+            rule_context_parts.append("[No relevant regulatory passage retrieved for this check]")
+    rule_context = "\n\n".join(rule_context_parts)
+    kfs_context = "\n\n".join(
+        f"[{page['id']}] KFS page {page['page']}\n{page['text']}"
+        for page in document_pages
     )
     try:
+        report_progress("Running grounded LLM analysis and generating structured results")
         client = Groq(api_key=api_key, timeout=config.GROQ_TIMEOUT_SECONDS)
         completion = client.chat.completions.create(
             model=config.GROQ_MODEL,
@@ -179,8 +285,11 @@ def audit_kfs_document(pdf_path: str, api_key: str | None = None) -> dict[str, A
             messages=[
                 {"role": "system", "content": COMPLIANCE_SYSTEM_PROMPT},
                 {"role": "user", "content": (
-                    f"RBI source context (cite only these sources and page numbers):\n{context}\n\n"
-                    f"Draft KFS text:\n{kfs_text}\n\nReturn only the requested JSON report."
+                    f"RULE EVIDENCE (cite only IDs listed here):\n{rule_context}\n\n"
+                    f"KFS EVIDENCE (cite only page IDs listed here):\n{kfs_context}\n\n"
+                    f"For each check, use only the rule passages retrieved for its topic. "
+                    f"Source PDFs configured: {', '.join(path.name for path in sorted(Path(config.RBI_DOCS_DIR).glob('*.pdf')))}. "
+                    f"Return all four checks in the requested JSON format."
                 )},
             ],
         )
@@ -189,6 +298,7 @@ def audit_kfs_document(pdf_path: str, api_key: str | None = None) -> dict[str, A
 
     response_text = completion.choices[0].message.content or ""
     try:
-        return _validate_report(json.loads(response_text))
+        report_progress("Validating evidence references and assessment categories")
+        return _validate_report(json.loads(response_text), evidence_by_check, document_pages)
     except (json.JSONDecodeError, ValueError) as exc:
         raise RuntimeError(f"The AI service returned an invalid audit report: {exc}") from exc
