@@ -92,7 +92,9 @@ with st.sidebar:
 # ---------------------------------------------------------------------------
 # Main panel
 # ---------------------------------------------------------------------------
-audit_tab, context_tab = st.tabs(["KFS Audit", "Why & Architecture"])
+audit_tab, why_tab, architecture_tab, contact_tab = st.tabs(
+    ["KFS Audit", "Why this exists", "AI Architecture", "Contact"]
+)
 
 with audit_tab:
     st.title("RBI KFS Compliance Auditor")
@@ -224,13 +226,13 @@ with audit_tab:
             st.session_state.pop("audit_filename", None)
             st.rerun()
 
-with context_tab:
+with why_tab:
     st.title("Why this exists")
     st.markdown(
-        "Financial regulation failures can lead to customer harm, remediation costs, "
-        "business restrictions, penalties, or loss of a licence. This prototype explores "
-        "one practical prevention point: checking a digital-loan KFS before disbursal, "
-        "with the intended goal of catching missing or unclear disclosures early."
+        "Financial-services compliance failures can harm customers and lead to remediation, "
+        "business restrictions, penalties, or licence consequences. This project explores "
+        "one practical control point: review a digital-loan KFS before disbursal and flag "
+        "missing or unclear disclosures for a human compliance reviewer."
     )
 
     st.subheader("Regulatory events that show the stakes")
@@ -257,41 +259,88 @@ with context_tab:
         "it would not have prevented every issue in these cases."
     )
 
-    st.divider()
-    st.title("Application architecture")
-    st.caption("A small retrieval-augmented generation (RAG) flow: find source passages first, then ask the model to assess the draft against those passages.")
-
-    flow = st.columns(5)
-    flow_items = [
-        ("1 · Input", "Draft KFS PDF"),
-        ("2 · Extract", "pypdf gets text"),
-        ("3 · Retrieve", "Rank RBI passages"),
-        ("4 · Assess", "Groq model, JSON output"),
-        ("5 · Review", "Findings + source pages"),
-    ]
-    for column, (heading, detail) in zip(flow, flow_items):
-        with column:
-            st.markdown(f"**{heading}**")
-            st.write(detail)
-    st.code(
-        "KFS PDF → extract text → retrieve matching RBI page excerpts → Groq assessment → JSON report → human review",
-        language="text",
-    )
-
-    st.subheader("Technology choices")
-    tools = [
-        ("Streamlit", "Python UI and hosting", "Fast way to publish an interactive prototype without building a separate frontend."),
-        ("pypdf", "PDF text extraction", "Reads text and page numbers from text-based KFS and rule PDFs."),
-        ("Lightweight lexical retrieval", "Source passage search", "Ranks relevant passages without a vector database or a large embedding model; cheaper to host, but less semantic."),
-        ("Groq API", "Hosted model inference", "Runs the language model without a dedicated GPU server; uploaded KFS text is sent to the provider."),
-        ("JSON validation", "Structured result checks", "Rejects malformed model output before the UI presents a report."),
-        ("Streamlit Secrets", "Credential storage", "Keeps the Groq API key out of source code and the public GitHub repository."),
-    ]
-    for name, role, reason in tools:
-        st.markdown(f"**{name} · {role}**  \n{reason}")
-
     st.warning(
         "The current bundled RBI PDF is synthetic demo material. Replace it with verified official source documents "
         "before claiming RBI-grounded results. The model's output needs human compliance review; this is not legal advice.",
         icon="⚠️",
     )
+
+with architecture_tab:
+    st.title("AI Architecture")
+    st.markdown(
+        "A lightweight **retrieval-augmented generation (RAG)** design. The model is not asked to rely on memory alone: "
+        "the app retrieves passages from the configured RBI PDFs, attaches source/page labels, and sends that evidence with the KFS."
+    )
+
+    st.subheader("End-to-end flow")
+    st.caption("Two connected paths: prepare a searchable rule corpus, then ground each KFS review in retrieved evidence.")
+
+    st.markdown("**A · Rule knowledge preparation**")
+    prep_columns = st.columns([1, 0.18, 1, 0.18, 1, 0.18, 1])
+    prep_steps = [
+        (0, "RBI rule PDFs", "Official documents\nwith page boundaries"),
+        (2, "PDF parsing", "pypdf extracts\ntext + page number"),
+        (4, "Chunking", "Overlapping passages\nkeep page provenance"),
+        (6, "Local rule corpus", "Cached in memory\nfor retrieval"),
+    ]
+    for column_index, title, detail in prep_steps:
+        with prep_columns[column_index]:
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                st.caption(detail)
+    for column_index in (1, 3, 5):
+        with prep_columns[column_index]:
+            st.markdown("<div style='text-align:center; padding-top:18px'>→</div>", unsafe_allow_html=True)
+
+    st.markdown("**B · Per-document AI audit**")
+    audit_columns = st.columns([1, 0.15, 1, 0.15, 1, 0.15, 1, 0.15, 1])
+    audit_steps = [
+        (0, "KFS PDF", "Borrower-facing\nloan disclosure"),
+        (2, "Text extraction", "pypdf reads text\nwithin size/page limits"),
+        (4, "RAG retrieval", "Four topic queries\nrank rule passages"),
+        (6, "Groq LLM", "KFS + evidence +\nstrict audit prompt"),
+        (8, "Validated report", "JSON schema check,\nsource labels, human review"),
+    ]
+    for column_index, title, detail in audit_steps:
+        with audit_columns[column_index]:
+            with st.container(border=True):
+                st.markdown(f"**{title}**")
+                st.caption(detail)
+    for column_index in (1, 3, 5, 7):
+        with audit_columns[column_index]:
+            st.markdown("<div style='text-align:center; padding-top:18px'>→</div>", unsafe_allow_html=True)
+
+    st.info(
+        "**AI pattern:** retrieval grounds generation (RAG); the model returns structured JSON; "
+        "validation checks the response shape; a person remains responsible for the compliance decision.",
+        icon="🧠",
+    )
+
+    st.subheader("Tools, one line each")
+    tools = [
+        ("Streamlit", "Python UI + hosting", "Makes the upload, audit, and explanation views easy to share as a live demo."),
+        ("pypdf", "PDF text + page extraction", "Turns text-based agreements and rule PDFs into auditable text while retaining source pages."),
+        ("Lexical retrieval", "RAG retrieval stage", "Finds relevant rule passages without a hosted vector database or large embedding model; lightweight, but less semantic."),
+        ("Groq API + GPT-OSS 120B", "Hosted LLM inference", "Assesses the supplied KFS against retrieved evidence without requiring a GPU server; document text leaves the app to reach the provider."),
+        ("Strict prompt + JSON validation", "Structured generation", "Constrains the model to four checks and verifies the returned report shape before display."),
+        ("Streamlit Secrets", "Secret management", "Keeps the provider API key outside source code and Git history."),
+        ("GitHub", "Version control + deploy source", "Stores the public code so Streamlit Community Cloud can deploy updates from the main branch."),
+    ]
+    for name, role, reason in tools:
+        st.markdown(f"**{name} · {role}**  \n{reason}")
+
+    st.warning(
+        "Current limitation: rules bundled with this demo are synthetic. Replace them with verified official RBI documents, "
+        "and evaluate retrieval and citations before presenting this as regulation-grounded. Not legal advice.",
+        icon="⚠️",
+    )
+
+with contact_tab:
+    st.title("Contact")
+    st.markdown(
+        "I’m interested in applying AI, GenAI, and other emerging technologies to practical business problems, "
+        "including NBFC and financial-services workflows. For implementation discussions, collaboration, or a demo:"
+    )
+    st.markdown("**Email**  \n[singhn9282@gmail.com](mailto:singhn9282@gmail.com)")
+    st.markdown("**LinkedIn**  \n[Connect with Niraj](https://www.linkedin.com/in/niraj-s-8b9984152/)")
+    st.caption("Please do not send confidential customer, borrower, or regulated data through this public demo.")
