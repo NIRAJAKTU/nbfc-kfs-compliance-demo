@@ -1,0 +1,10 @@
+# Drop RBI PDF documents into this folder before running ingest_rbi.py
+#
+# Recommended documents to download from rbi.org.in:
+#   - Digital Lending Guidelines 2022 (RBI/2022-23/111)
+#   - Master Direction - Non-Banking Financial Company – Systemically Important
+#     Non-Deposit taking Company and Deposit taking Company (Reserve Bank) Directions, 2016
+#   - Fair Practices Code for NBFCs (Master Circular)
+#   - Key Fact Statement Guidelines
+#
+# This file exists only to preserve the empty directory in git.

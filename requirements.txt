@@ -1,0 +1,4 @@
+# Lean hosted runtime: Streamlit UI, Groq inference client, and PDF text extraction.
+groq==0.31.0
+streamlit==1.37.0
+pypdf==4.2.0
