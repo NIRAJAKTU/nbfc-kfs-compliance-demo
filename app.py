@@ -26,35 +26,6 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-st.markdown(
-    """
-    <style>
-    :root {
-        --ink: #102a43;
-        --muted: #526579;
-        --line: #d7e0e8;
-        --surface: #ffffff;
-        --canvas: #f4f7fa;
-        --teal: #087e83;
-    }
-    .stApp { background: var(--canvas); color: var(--ink); }
-    [data-testid="stHeader"] { background: rgba(244,247,250,.94); }
-    [data-testid="stTabs"] [role="tablist"] { gap: .45rem; border-bottom: 1px solid var(--line); }
-    [data-testid="stTabs"] button[role="tab"] { color: var(--muted); font-weight: 650; }
-    [data-testid="stTabs"] button[aria-selected="true"] { color: var(--teal); }
-    [data-testid="stVerticalBlock"] > [data-testid="stVerticalBlock"] { gap: .85rem; }
-    [data-testid="stFileUploader"] section { background: var(--surface); border-color: #9fb3c5; }
-    [data-testid="stMetric"] { background: var(--surface); border: 1px solid var(--line); padding: .8rem; border-radius: 8px; }
-    @media (max-width: 720px) {
-        [data-testid="stHorizontalBlock"] { flex-wrap: wrap; gap: .5rem; }
-        [data-testid="stHorizontalBlock"] > [data-testid="column"] { min-width: 100% !important; }
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
-
-
 def get_groq_api_key() -> str | None:
     environment_key = os.getenv("GROQ_API_KEY")
     if environment_key:
@@ -277,11 +248,11 @@ with audit_tab:
 
                 st.markdown("**Recommended next action**")
                 if category == "Potential Gap":
-                    st.warning(check.get("recommended_action", "Review this disclosure with a compliance professional."), icon="!")
+                    st.warning(check.get("recommended_action", "Review this disclosure with a compliance professional."), icon="⚠️")
                 elif category == "Insufficient Evidence":
                     st.info(check.get("recommended_action", "Review the source document and KFS manually."), icon="ℹ️")
                 else:
-                    st.success(check.get("recommended_action", "No corrective action suggested by this demonstration."), icon="✓")
+                    st.success(check.get("recommended_action", "No corrective action suggested by this demonstration."), icon="✅")
 
         report_bytes = build_audit_pdf(filename, result)
         safe_filename = Path(filename).stem.replace(" ", "_")
