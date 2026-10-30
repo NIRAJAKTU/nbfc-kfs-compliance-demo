@@ -101,14 +101,14 @@ def build_audit_pdf(filename: str, report: dict[str, Any]) -> bytes:
         ))
         story.append(Paragraph(f'<b>Finding:</b> {_paragraph_text(check.get("finding"))}', styles["BodySmall"]))
 
+        story.append(Paragraph(
+            f'<b>Exact extracted KFS evidence quote:</b> {_paragraph_text(check.get("document_evidence"))}',
+            styles["BodySmall"],
+        ))
         document_evidence = check.get("document_details", [])
         if document_evidence:
-            story.append(Paragraph("<b>KFS evidence:</b>", styles["BodySmall"]))
-            for item in document_evidence:
-                story.append(Paragraph(
-                    f'{_paragraph_text(item.get("reference"))}: {_paragraph_text(item.get("excerpt"))}',
-                    styles["BodySmall"],
-                ))
+            page_references = ", ".join(str(item.get("reference", "KFS page")) for item in document_evidence)
+            story.append(Paragraph(f"<b>KFS page reference(s):</b> {_paragraph_text(page_references)}", styles["BodySmall"]))
 
         rule_evidence = check.get("source_details", [])
         if rule_evidence:

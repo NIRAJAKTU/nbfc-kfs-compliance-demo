@@ -1,4 +1,4 @@
-# Loan KFS Compliance Auditor (AI/GenAI Portfolio Demo)
+# AI-Powered Loan KFS Compliance Auditor
 
 An AI/GenAI portfolio demonstration for analyzing NBFC Loan Key Facts Statements against configured RBI regulatory references.
 
@@ -52,13 +52,13 @@ The app reads the configured source PDFs directly; no separate vector index is b
 1. You upload a draft KFS/loan PDF in the web app.
 2. System extracts text from your PDF.
 3. System retrieves relevant passages from configured rule PDFs and retains their file/page references.
-4. Groq-hosted LLM assesses four topics:
-   - APR disclosure
-   - Penal charges as flat fee (no compounding)
-   - Cooling-off/look-up period
-   - Nodal grievance officer details
+4. Groq-hosted LLM assesses four Loan KFS requirements:
+  - APR Disclosure
+  - Penal Charges
+  - Cooling-off Period
+  - Grievance Redressal Details
 5. The app returns one category per check: `Compliant`, `Potential Gap`, or `Insufficient Evidence`.
-6. The reviewer can inspect KFS page excerpts and retrieved rule passages, see recommended actions, and download a PDF assessment report.
+6. The reviewer can inspect the exact extracted KFS evidence quote and page reference, retrieved rule passages, recommended actions, and download a PDF assessment report.
 
 ---
 
@@ -107,13 +107,13 @@ If you want to understand the project quickly, read files in this order:
 
 1. `app.py`
    - UI and demo entry point.
-  - Handles bounded PDF upload, staged processing indicators, three-category result cards, evidence display, and report download.
+  - Handles Loan KFS PDF upload, staged processing indicators, three-category findings, exact KFS quote and page references, retrieved rule evidence, and report download.
   - Includes Business Challenges, AI Architecture, and AI Solutions tabs for portfolio viewers.
 
 2. `audit_engine.py`
    - Main business logic for compliance checking.
    - Core function: `audit_kfs_document(pdf_path)`.
-  - Extracts KFS text, retrieves source/page-labeled passages, calls Groq, validates evidence IDs and the JSON result.
+  - Extracts Loan KFS text, retrieves source/page-labeled passages, calls Groq, validates evidence IDs and structured assessment results.
    - If you want to understand the actual audit flow, this is the most important file.
 
 3. `ingest_rbi.py`
@@ -125,7 +125,7 @@ If you want to understand the project quickly, read files in this order:
    - Change this file if you want to switch model or tune retrieval behavior.
 
 5. `audit_report.py`
-  - Creates the downloadable PDF assessment, including per-check findings, evidence references, recommendations, and the demonstration disclaimer.
+  - Creates the downloadable Loan KFS assessment, including exact extracted quotes, page/source references, recommendations, and the demo disclaimer.
 
 ### Supporting files
 

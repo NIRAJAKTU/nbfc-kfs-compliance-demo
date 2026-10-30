@@ -54,7 +54,7 @@ with st.sidebar:
 
     st.divider()
 
-    st.markdown("**Regulatory Scope**")
+    st.markdown("**Demo Validation Scope**")
     st.markdown("- RBI Digital Lending Guidelines (2022)")
     st.markdown("- Master Directions — NBFC")
     st.markdown("- Fair Practices Code")
@@ -97,9 +97,9 @@ audit_tab, why_tab, architecture_tab, contact_tab = st.tabs(
 )
 
 with audit_tab:
-    st.title("Loan KFS Compliance Auditor")
+    st.title("AI-Powered Loan KFS Compliance Auditor")
     st.markdown(
-        "AI-powered analysis of NBFC Loan Key Facts Statements against configured RBI regulatory requirements."
+        "An AI-native financial document intelligence solution leveraging Generative AI, Retrieval-Augmented Generation (RAG), and evidence-grounded LLM reasoning to assess NBFC Loan Key Facts Statements against configured RBI regulatory requirements."
     )
 
     st.warning(
@@ -131,7 +131,7 @@ with audit_tab:
     st.divider()
 
     uploaded_file = st.file_uploader(
-        label="Upload your Loan KFS (Key Facts Statement) PDF",
+        label="Upload your Loan Key Facts Statement (KFS)",
         type=["pdf"],
         help=f"Upload a text-based Loan KFS PDF · maximum {config.MAX_UPLOAD_MB} MB and {config.MAX_KFS_PAGES} pages.",
         label_visibility="visible",
@@ -239,11 +239,12 @@ with audit_tab:
                 source_details = check.get("source_details", [])
                 evidence_col, source_col = st.columns(2)
                 with evidence_col:
-                    st.markdown("**Document evidence**")
+                    st.markdown("**Exact extracted KFS evidence quote**")
+                    st.code(check.get("document_evidence", "No exact KFS quote was provided."), language=None)
+                    st.markdown("**KFS page reference(s)**")
                     if document_details:
                         for item in document_details:
                             st.caption(item.get("reference", "KFS page"))
-                            st.code(item.get("excerpt", ""), language=None)
                     else:
                         st.caption("No specific KFS page was cited.")
                 with source_col:
