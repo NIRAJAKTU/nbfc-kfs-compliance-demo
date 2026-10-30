@@ -229,15 +229,23 @@ with audit_tab:
 with why_tab:
     st.title("Why this exists")
     st.markdown(
-        "Financial-services compliance failures can harm customers and lead to remediation, "
-        "business restrictions, penalties, or licence consequences. This project explores "
-        "one practical control point: review a digital-loan KFS before disbursal and flag "
-        "missing or unclear disclosures for a human compliance reviewer."
+        "A regulatory requirement only protects customers when it is translated into a "
+        "repeatable operational check. When a loan disclosure is incomplete, a pricing "
+        "control is missed, or a required process is not followed, the consequences can "
+        "include customer harm, remediation, restrictions on new business, financial "
+        "penalties, and in serious cases licence action."
+    )
+    st.markdown(
+        "This project explores a specific prevention point in digital lending: review the "
+        "Key Fact Statement **before disbursal**, compare it with configured regulatory "
+        "evidence, and surface potential gaps for a compliance professional to resolve. "
+        "The aim is to move checks closer to the operational decision, not to replace "
+        "compliance teams or claim that one KFS check prevents every enforcement event."
     )
 
     st.subheader("Regulatory events that show the stakes")
     st.markdown(
-        "**Navi Finserv and three other NBFCs (2024).** RBI directed them to cease new "
+        "**Navi Finserv and three other NBFCs (2024):** RBI directed them to cease new "
         "loan sanctions and disbursals from October 21, citing concerns including "
         "excessive pricing/spreads, fair-practice issues, and other supervisory findings. "
         "Navi's restrictions were lifted on December 2, 2024 after RBI accepted remediation. "
@@ -268,20 +276,20 @@ with why_tab:
 with architecture_tab:
     st.title("AI Architecture")
     st.markdown(
-        "A lightweight **retrieval-augmented generation (RAG)** design. The model is not asked to rely on memory alone: "
-        "the app retrieves passages from the configured RBI PDFs, attaches source/page labels, and sends that evidence with the KFS."
+        "This demo showcases a grounded **GenAI / RAG pipeline**: retrieve relevant regulatory evidence first, "
+        "then ask a language model to assess the KFS against that evidence. The model is not treated as the source of law."
     )
 
-    st.subheader("End-to-end flow")
-    st.caption("Two connected paths: prepare a searchable rule corpus, then ground each KFS review in retrieved evidence.")
+    st.subheader("End-to-end GenAI flow")
+    st.caption("Knowledge preparation creates the evidence base; inference retrieves evidence for each KFS and generates a reviewable result.")
 
-    st.markdown("**A · Rule knowledge preparation**")
-    prep_columns = st.columns([1, 0.18, 1, 0.18, 1, 0.18, 1])
+    st.markdown("**1 · Knowledge preparation**")
+    prep_columns = st.columns([1, 0.12, 1, 0.12, 1, 0.12, 1])
     prep_steps = [
-        (0, "RBI rule PDFs", "Official documents\nwith page boundaries"),
-        (2, "PDF parsing", "pypdf extracts\ntext + page number"),
-        (4, "Chunking", "Overlapping passages\nkeep page provenance"),
-        (6, "Local rule corpus", "Cached in memory\nfor retrieval"),
+        (0, "Regulatory sources", "RBI PDFs with page\nand document identity"),
+        (2, "Text + provenance", "Extract text and retain\nsource/page metadata"),
+        (4, "Chunking", "Split long text into\noverlapping passages"),
+        (6, "Rule corpus", "Prepared passages\nready for retrieval"),
     ]
     for column_index, title, detail in prep_steps:
         with prep_columns[column_index]:
@@ -292,14 +300,14 @@ with architecture_tab:
         with prep_columns[column_index]:
             st.markdown("<div style='text-align:center; padding-top:18px'>→</div>", unsafe_allow_html=True)
 
-    st.markdown("**B · Per-document AI audit**")
-    audit_columns = st.columns([1, 0.15, 1, 0.15, 1, 0.15, 1, 0.15, 1])
+    st.markdown("**2 · Per-document inference**")
+    audit_columns = st.columns([1, 0.1, 1, 0.1, 1, 0.1, 1, 0.1, 1])
     audit_steps = [
-        (0, "KFS PDF", "Borrower-facing\nloan disclosure"),
-        (2, "Text extraction", "pypdf reads text\nwithin size/page limits"),
-        (4, "RAG retrieval", "Four topic queries\nrank rule passages"),
-        (6, "Groq LLM", "KFS + evidence +\nstrict audit prompt"),
-        (8, "Validated report", "JSON schema check,\nsource labels, human review"),
+        (0, "KFS input", "Extract text from\nthe draft document"),
+        (2, "Topic queries", "APR · penalties · exit\nperiod · grievance"),
+        (4, "Evidence retrieval", "Rank matching chunks;\nkeep source/page refs"),
+        (6, "RAG + LLM", "Prompt combines KFS,\nevidence, audit rules"),
+        (8, "Structured review", "Validate JSON; show\nfindings to a human"),
     ]
     for column_index, title, detail in audit_steps:
         with audit_columns[column_index]:
@@ -311,23 +319,44 @@ with architecture_tab:
             st.markdown("<div style='text-align:center; padding-top:18px'>→</div>", unsafe_allow_html=True)
 
     st.info(
-        "**AI pattern:** retrieval grounds generation (RAG); the model returns structured JSON; "
-        "validation checks the response shape; a person remains responsible for the compliance decision.",
+        "**Core design choice:** retrieval grounds generation (RAG). This helps limit unsupported answers, "
+        "but does not guarantee correctness; source quality, retrieval coverage, and human review still matter.",
         icon="🧠",
     )
 
-    st.subheader("Tools, one line each")
-    tools = [
-        ("Streamlit", "Python UI + hosting", "Makes the upload, audit, and explanation views easy to share as a live demo."),
-        ("pypdf", "PDF text + page extraction", "Turns text-based agreements and rule PDFs into auditable text while retaining source pages."),
-        ("Lexical retrieval", "RAG retrieval stage", "Finds relevant rule passages without a hosted vector database or large embedding model; lightweight, but less semantic."),
-        ("Groq API + GPT-OSS 120B", "Hosted LLM inference", "Assesses the supplied KFS against retrieved evidence without requiring a GPU server; document text leaves the app to reach the provider."),
-        ("Strict prompt + JSON validation", "Structured generation", "Constrains the model to four checks and verifies the returned report shape before display."),
-        ("Streamlit Secrets", "Secret management", "Keeps the provider API key outside source code and Git history."),
-        ("GitHub", "Version control + deploy source", "Stores the public code so Streamlit Community Cloud can deploy updates from the main branch."),
+    st.subheader("AI / GenAI concepts demonstrated")
+    concepts = [
+        (
+            "Document chunking + provenance",
+            "Long rulebooks are divided into overlapping passages. Each passage keeps its source PDF and page number so retrieved evidence can be traced back.",
+        ),
+        (
+            "Local rule corpus",
+            "Configured RBI documents form the bounded knowledge base. The model receives selected excerpts instead of being asked to recall regulations from training memory.",
+        ),
+        (
+            "Lexical retrieval in a RAG pipeline",
+            "Topic-focused queries rank passages by term relevance, then provide those passages as context to generation. This MVP uses lightweight lexical search; it is not an embedding/vector search system.",
+        ),
+        (
+            "Prompt design + task decomposition",
+            "Four compliance questions are made explicit, with instructions to use only supplied context, fail closed when evidence is missing, and avoid invented citations.",
+        ),
+        (
+            "LLM inference",
+            "Groq serves the configured GPT-OSS 120B model. It compares extracted KFS text with retrieved evidence and drafts a structured assessment; uploaded text is sent to the model provider.",
+        ),
+        (
+            "Structured generation + validation",
+            "JSON-mode output is checked for the expected status and violations fields before the UI displays it, reducing malformed-response failures.",
+        ),
+        (
+            "Human-in-the-loop review",
+            "The result is an assistive finding, not an autonomous compliance verdict. A qualified reviewer checks the cited document and makes the decision.",
+        ),
     ]
-    for name, role, reason in tools:
-        st.markdown(f"**{name} · {role}**  \n{reason}")
+    for concept, explanation in concepts:
+        st.markdown(f"**{concept}**  \n{explanation}")
 
     st.warning(
         "Current limitation: rules bundled with this demo are synthetic. Replace them with verified official RBI documents, "
@@ -338,8 +367,10 @@ with architecture_tab:
 with contact_tab:
     st.title("Contact")
     st.markdown(
-        "I’m interested in applying AI, GenAI, and other emerging technologies to practical business problems, "
-        "including NBFC and financial-services workflows. For implementation discussions, collaboration, or a demo:"
+        "Have a business challenge, an NBFC workflow, or an AI idea you want to explore? "
+        "I can connect your use case with my AI, GenAI, and emerging-technology skills, then work with you "
+        "to build a practical solution around what your business needs. Reach out to discuss your goal, "
+        "shape the approach, or explore an implementation together."
     )
     st.markdown("**Email**  \n[singhn9282@gmail.com](mailto:singhn9282@gmail.com)")
     st.markdown("**LinkedIn**  \n[Connect with Niraj](https://www.linkedin.com/in/niraj-s-8b9984152/)")
